@@ -1,0 +1,17 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Environnements virtuels
+.venv/
+venv/
+env/
+
+# Données générées par le bot
+screenshots/
+training_data/
+models/
+
+# Autres
+*.log
