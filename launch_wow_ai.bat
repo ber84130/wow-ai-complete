@@ -4,7 +4,7 @@ REM WoW AI Complete - Lanceur rapide
 REM ============================================================
 
 echo ========================================
-echo WoW AI Complete - Leveling & Endgame Bot
+echo WoW AI Complete - Leveling ^& Endgame Bot
 echo ========================================
 echo.
 

@@ -237,9 +237,101 @@ class CharacterConfig:
     race: str = "Humain"
     class_name: str = "Guerrier"
     spec: str = "Armes"
+    expansion: str = "Vanilla"
     primary_professions: List[str] = None
     secondary_professions: List[str] = None
 
+
+# Tables de compatibilité simple pour races / classes / rôles
+FACTION_RACES = {
+    "Alliance": ["Humain", "Elfe de la nuit", "Nain"],
+    "Horde": ["Orc", "Tauren", "Mort-vivant", "Troll"],
+}
+
+CLASS_SPECS = {
+    "Guerrier": ["Armes", "Fureur", "Protection"],
+    "Paladin": ["Tank", "Soin", "DPS"],
+    "Chasseur": ["DPS"],
+    "Voleur": ["DPS"],
+    "Prêtre": ["Soin", "DPS"],
+    "Chaman": ["Soin", "DPS", "Tank"],
+    "Mage": ["DPS"],
+    "Démoniste": ["DPS"],
+    "Druide": ["Tank", "Soin", "DPS"],
+}
+
+CLASS_ROLES = {
+    "Guerrier": ["Tank", "DPS"],
+    "Paladin": ["Tank", "Heal", "DPS"],
+    "Chasseur": ["DPS"],
+    "Voleur": ["DPS"],
+    "Prêtre": ["Heal", "DPS"],
+    "Chaman": ["Heal", "DPS", "Tank"],
+    "Mage": ["DPS"],
+    "Démoniste": ["DPS"],
+    "Druide": ["Tank", "Heal", "DPS"],
+}
+
+# Compatibilité simplifiée race -> classes (jusqu'à WotLK, version éducative)
+RACE_CLASSES = {
+    # Alliance
+    "Humain": ["Guerrier", "Paladin", "Voleur", "Prêtre", "Mage", "Démoniste"],
+    "Elfe de la nuit": ["Guerrier", "Chasseur", "Voleur", "Prêtre", "Druide"],
+    "Nain": ["Guerrier", "Paladin", "Chasseur", "Prêtre", "Voleur"],
+    "Gnome": ["Guerrier", "Voleur", "Mage", "Démoniste"],
+    "Draeneï": ["Guerrier", "Paladin", "Chasseur", "Prêtre", "Mage", "Chaman"],
+    # Horde
+    "Orc": ["Guerrier", "Chasseur", "Voleur", "Chaman", "Démoniste"],
+    "Tauren": ["Guerrier", "Chaman", "Druide"],
+    "Mort-vivant": ["Guerrier", "Voleur", "Prêtre", "Mage", "Démoniste"],
+    "Troll": ["Guerrier", "Chasseur", "Voleur", "Prêtre", "Mage", "Chaman"],
+    "Elfe de sang": ["Guerrier", "Paladin", "Chasseur", "Voleur", "Prêtre", "Mage", "Démoniste"],
+}
+
+
+def is_race_allowed(expansion: str, faction: str, race: str) -> bool:
+    """Renvoie True si la race est disponible pour la faction à cette extension.
+
+    Simplifié pour Vanilla / TBC / WotLK.
+    """
+    # Races par extension (version simplifiée)
+    if expansion == "Vanilla":
+        allowed = {
+            "Alliance": ["Humain", "Elfe de la nuit", "Nain", "Gnome"],
+            "Horde": ["Orc", "Tauren", "Mort-vivant", "Troll"],
+        }
+    else:  # TBC, WotLK
+        allowed = {
+            "Alliance": ["Humain", "Elfe de la nuit", "Nain", "Gnome", "Draeneï"],
+            "Horde": ["Orc", "Tauren", "Mort-vivant", "Troll", "Elfe de sang"],
+        }
+
+    return race in allowed.get(faction, [])
+
+
+def is_class_allowed(expansion: str, faction: str, race: str, class_name: str) -> bool:
+    """Renvoie True si la classe est cohérente pour la race/faction/extension.
+
+    - Vanilla: pas de Paladin Horde, pas de Chaman Alliance.
+    - TBC: Paladin côté Horde uniquement Elfe de sang; Chaman côté Alliance uniquement Draeneï.
+    - WotLK: on garde les mêmes règles que TBC ici (simplifié).
+    """
+    # D'abord, vérifier que la race peut jouer cette classe en général
+    if class_name not in RACE_CLASSES.get(race, []):
+        return False
+
+    if expansion == "Vanilla":
+        if faction == "Alliance" and class_name == "Chaman":
+            return False
+        if faction == "Horde" and class_name == "Paladin":
+            return False
+    else:  # TBC, WotLK
+        if class_name == "Paladin" and faction == "Horde" and race != "Elfe de sang":
+            return False
+        if class_name == "Chaman" and faction == "Alliance" and race != "Draeneï":
+            return False
+
+    return True
 
 # ============================================================
 # RÉSEAUX DE NEURONES
@@ -770,6 +862,10 @@ class EndgameAgent:
             'arena': False
         }
 
+        # Sous-modes de farm
+        self.farm_quests = False
+        self.farm_professions = False
+
         # Placeholders pour futur modèle Deep RL
         self.model = None
         self.target_model = None
@@ -815,6 +911,10 @@ class EndgameAgent:
                         self._use_defensive()
                     elif detections.get('enemies'):
                         self._smart_combat(detections['enemies'])
+                    elif self.farm_quests:
+                        self._handle_quests_endgame(detections)
+                    elif self.farm_professions:
+                        self._handle_professions_endgame(detections)
                     else:
                         self._positioning()
 
@@ -878,6 +978,28 @@ class EndgameAgent:
         self.keyboard.press(key)
         time.sleep(random.uniform(0.3, 0.7))
         self.keyboard.release(key)
+
+    def _handle_quests_endgame(self, detections):
+        """Placeholder pour farm quêtes en endgame.
+
+        Ici on se contente de logger quand des marqueurs de quêtes sont vus.
+        La communauté pourra brancher une vraie logique de déplacement/interaction.
+        """
+        markers = detections.get('quest_markers') or []
+        if markers and self.callback:
+            m = markers[0]
+            self.callback("info", f"(Endgame) Quête détectée vers ({m['x']}, {m['y']})")
+
+    def _handle_professions_endgame(self, detections):
+        """Placeholder pour farm métiers/ressources en endgame.
+
+        Pour l'instant, on journalise seulement qu'on est en mode farm métiers.
+        """
+        if self.callback:
+            self.callback(
+                "info",
+                f"(Endgame) Mode farm métiers actif pour {self.character_config.primary_professions}"
+            )
 
 
 # ============================================================
@@ -1136,11 +1258,41 @@ class WoWAIInterface:
             bg='#f0f0f0'
         ).pack(pady=10, padx=15)
 
+        # Contrôles (boutons start/stop) placés juste après les infos
+        control_frame = tk.Frame(frame, bg='#f0f0f0')
+        control_frame.pack(pady=10)
+        
+        self.start_leveling_btn = tk.Button(
+            control_frame,
+            text="▶️ DÉMARRER BOT LEVELING",
+            font=('Arial', 14, 'bold'),
+            bg='#27ae60',
+            fg='white',
+            command=self.start_leveling,
+            width=30,
+            height=2
+        )
+        self.start_leveling_btn.pack(side='left', padx=5)
+        
+        self.stop_leveling_btn = tk.Button(
+            control_frame,
+            text="⏹️ ARRÊTER AGENT",
+            font=('Arial', 14, 'bold'),
+            bg='#e74c3c',
+            fg='white',
+            command=self.stop_leveling,
+            width=30,
+            height=2,
+            state='disabled'
+        )
+        self.stop_leveling_btn.pack(side='left', padx=5)
+
         # Configuration personnage
         char_frame = tk.LabelFrame(frame, text="Configuration du personnage", font=('Arial', 11, 'bold'), bg='#f0f0f0')
         char_frame.pack(fill='x', padx=20, pady=10)
 
         # Variables UI
+        self.var_expansion = tk.StringVar(value=self.character_config.expansion)
         self.var_faction = tk.StringVar(value=self.character_config.faction)
         self.var_race = tk.StringVar(value=self.character_config.race)
         self.var_class = tk.StringVar(value=self.character_config.class_name)
@@ -1162,33 +1314,45 @@ class WoWAIInterface:
         self.var_sec_prof1 = tk.StringVar(value="Aucun")
         self.var_sec_prof2 = tk.StringVar(value="Aucun")
 
+        # Ligne 0: extension
+        row0 = tk.Frame(char_frame, bg='#f0f0f0')
+        row0.pack(fill='x', padx=10, pady=3)
+
+        tk.Label(row0, text="Extension:", bg='#f0f0f0').pack(side='left')
+        self.cb_expansion = ttk.Combobox(row0, textvariable=self.var_expansion, values=["Vanilla", "TBC", "WotLK"], width=10, state='readonly')
+        self.cb_expansion.pack(side='left', padx=5)
+        self.cb_expansion.bind("<<ComboboxSelected>>", lambda e: self._on_expansion_change())
+
         # Ligne 1: faction / race
         row1 = tk.Frame(char_frame, bg='#f0f0f0')
         row1.pack(fill='x', padx=10, pady=3)
 
         tk.Label(row1, text="Faction:", bg='#f0f0f0').pack(side='left')
-        ttk.Combobox(row1, textvariable=self.var_faction, values=["Alliance", "Horde"], width=12, state='readonly').pack(side='left', padx=5)
+        self.cb_faction = ttk.Combobox(row1, textvariable=self.var_faction, values=list(FACTION_RACES.keys()), width=12, state='readonly')
+        self.cb_faction.pack(side='left', padx=5)
+        self.cb_faction.bind("<<ComboboxSelected>>", lambda e: self._on_faction_change())
 
         tk.Label(row1, text="Race:", bg='#f0f0f0').pack(side='left', padx=15)
-        ttk.Combobox(row1, textvariable=self.var_race, values=["Humain", "Elfe de la nuit", "Nain", "Orc", "Tauren", "Mort-vivant", "Troll"], width=18, state='readonly').pack(side='left', padx=5)
+        self.cb_race = ttk.Combobox(row1, textvariable=self.var_race, width=18, state='readonly')
+        self.cb_race.pack(side='left', padx=5)
+        self.cb_race.bind("<<ComboboxSelected>>", lambda e: self._on_race_change())
 
         # Ligne 2: classe / spé / rôle
         row2 = tk.Frame(char_frame, bg='#f0f0f0')
         row2.pack(fill='x', padx=10, pady=3)
 
         tk.Label(row2, text="Classe:", bg='#f0f0f0').pack(side='left')
-        ttk.Combobox(row2, textvariable=self.var_class, values=[
-            "Guerrier", "Paladin", "Chasseur", "Voleur", "Prêtre",
-            "Chaman", "Mage", "Démoniste", "Druide"
-        ], width=18, state='readonly').pack(side='left', padx=5)
+        self.cb_class = ttk.Combobox(row2, textvariable=self.var_class, values=list(CLASS_SPECS.keys()), width=18, state='readonly')
+        self.cb_class.pack(side='left', padx=5)
+        self.cb_class.bind("<<ComboboxSelected>>", lambda e: self._on_class_change())
 
         tk.Label(row2, text="Spé:", bg='#f0f0f0').pack(side='left', padx=15)
-        ttk.Combobox(row2, textvariable=self.var_spec, values=[
-            "Armes", "Fureur", "Protection", "Soin", "DPS", "Tank"
-        ], width=15, state='readonly').pack(side='left', padx=5)
+        self.cb_spec = ttk.Combobox(row2, textvariable=self.var_spec, width=15, state='readonly')
+        self.cb_spec.pack(side='left', padx=5)
 
         tk.Label(row2, text="Rôle:", bg='#f0f0f0').pack(side='left', padx=15)
-        ttk.Combobox(row2, textvariable=self.var_role, values=["Tank", "Heal", "DPS"], width=10, state='readonly').pack(side='left', padx=5)
+        self.cb_role = ttk.Combobox(row2, textvariable=self.var_role, width=10, state='readonly')
+        self.cb_role.pack(side='left', padx=5)
 
         # Ligne 3: priorité équipement
         row3 = tk.Frame(char_frame, bg='#f0f0f0')
@@ -1253,35 +1417,6 @@ class WoWAIInterface:
                 command=lambda k=key, v=var: self._update_behavior(k, v)
             ).pack(anchor='w', padx=20, pady=3)
         
-        # Contrôles
-        control_frame = tk.Frame(frame, bg='#f0f0f0')
-        control_frame.pack(pady=20)
-        
-        self.start_leveling_btn = tk.Button(
-            control_frame,
-            text="▶️ DÉMARRER AGENT",
-            font=('Arial', 14, 'bold'),
-            bg='#27ae60',
-            fg='white',
-            command=self.start_leveling,
-            width=30,
-            height=3
-        )
-        self.start_leveling_btn.pack(pady=5)
-        
-        self.stop_leveling_btn = tk.Button(
-            control_frame,
-            text="⏹️ ARRÊTER AGENT",
-            font=('Arial', 14, 'bold'),
-            bg='#e74c3c',
-            fg='white',
-            command=self.stop_leveling,
-            width=30,
-            height=3,
-            state='disabled'
-        )
-        self.stop_leveling_btn.pack(pady=5)
-        
         # Stats
         stats_frame = tk.LabelFrame(frame, text="Statistiques", font=('Arial', 11, 'bold'), bg='#f0f0f0')
         stats_frame.pack(fill='x', padx=20, pady=15)
@@ -1332,6 +1467,29 @@ class WoWAIInterface:
                 command=self._update_endgame_mode
             ).pack(side='left', padx=15, pady=5)
 
+        # Sous-modes de farm
+        farm_frame = tk.LabelFrame(frame, text="Modes de farm", font=('Arial', 11, 'bold'), bg='#f0f0f0')
+        farm_frame.pack(fill='x', padx=20, pady=10)
+
+        self.var_farm_quests = tk.BooleanVar(value=False)
+        self.var_farm_professions = tk.BooleanVar(value=False)
+
+        tk.Checkbutton(
+            farm_frame,
+            text="Farm quêtes",
+            variable=self.var_farm_quests,
+            bg='#f0f0f0',
+            command=self._update_endgame_farm_modes
+        ).pack(anchor='w', padx=15, pady=3)
+
+        tk.Checkbutton(
+            farm_frame,
+            text="Farm métiers / ressources",
+            variable=self.var_farm_professions,
+            bg='#f0f0f0',
+            command=self._update_endgame_farm_modes
+        ).pack(anchor='w', padx=15, pady=3)
+
         # Contrôles
         control_frame = tk.Frame(frame, bg='#f0f0f0')
         control_frame.pack(pady=20)
@@ -1381,6 +1539,71 @@ class WoWAIInterface:
     
     # Méthodes de contrôle
     
+    def _on_expansion_change(self):
+        """Quand l'extension change, on recalcule races et classes valides."""
+        # Forcer mise à jour faction -> races -> classes
+        self._on_faction_change()
+        self._on_race_change()
+
+    def _on_faction_change(self):
+        """Met à jour la liste des races en fonction de la faction et de l'extension."""
+        expansion = self.var_expansion.get()
+        faction = self.var_faction.get()
+
+        # Filtrer les races autorisées pour cette faction / extension
+        possible_races = FACTION_RACES.get(faction, [])
+        races = [r for r in possible_races if is_race_allowed(expansion, faction, r)]
+
+        self.cb_race['values'] = races
+        if races:
+            if self.var_race.get() not in races:
+                self.var_race.set(races[0])
+        else:
+            self.var_race.set("")
+
+        # Après changement de race, mettre à jour les classes
+        self._on_race_change()
+
+    def _on_race_change(self):
+        """Met à jour les classes possibles en fonction de la race/faction/extension."""
+        expansion = self.var_expansion.get()
+        faction = self.var_faction.get()
+        race = self.var_race.get()
+
+        # Toutes les classes globales filtrées par compatibilité
+        possible_classes = list(CLASS_SPECS.keys())
+        classes = [c for c in possible_classes if is_class_allowed(expansion, faction, race, c)]
+
+        self.cb_class['values'] = classes
+        if classes:
+            if self.var_class.get() not in classes:
+                self.var_class.set(classes[0])
+        else:
+            self.var_class.set("")
+
+        # Après changement de classe, mettre à jour spé/rôle
+        self._on_class_change()
+
+    def _on_class_change(self):
+        """Met à jour les spé et rôles possibles en fonction de la classe."""
+        cls = self.var_class.get()
+        specs = CLASS_SPECS.get(cls, [])
+        roles = CLASS_ROLES.get(cls, ["DPS"])
+
+        self.cb_spec['values'] = specs
+        if specs:
+            if self.var_spec.get() not in specs:
+                self.var_spec.set(specs[0])
+        else:
+            self.var_spec.set("")
+
+        self.cb_role['values'] = roles
+        if roles:
+            if self.var_role.get() not in roles:
+                self.var_role.set(roles[0])
+        else:
+            self.var_role.set("")
+
     def _apply_character_config(self):
         """Applique les choix UI au CharacterConfig partagé.
 
@@ -1426,6 +1649,22 @@ class WoWAIInterface:
             self.endgame_agent.modes[key] = (key == mode)
 
         self.log_message("info", f"Mode IA Endgame: {mode.upper()}")
+
+    def _update_endgame_farm_modes(self):
+        """Met à jour les sous-modes de farm (quêtes / métiers)."""
+        self.endgame_agent.farm_quests = self.var_farm_quests.get()
+        self.endgame_agent.farm_professions = self.var_farm_professions.get()
+
+        modes = []
+        if self.endgame_agent.farm_quests:
+            modes.append("quêtes")
+        if self.endgame_agent.farm_professions:
+            modes.append("métiers")
+
+        if modes:
+            self.log_message("info", f"IA Endgame: modes de farm actifs: {', '.join(modes)}")
+        else:
+            self.log_message("info", "IA Endgame: aucun mode de farm actif")
 
     def _update_behavior(self, key, var):
         self.leveling_agent.behaviors[key] = var.get()
@@ -1551,25 +1790,33 @@ class WoWAIInterface:
     def log_message(self, level, msg):
         if not hasattr(self, 'log_text'):
             return
-        
-        self.log_text.config(state='normal')
-        
-        timestamp = datetime.datetime.now().strftime("%H:%M:%S")
-        
-        if level == "info":
-            formatted = f"[{timestamp}] [INFO] {msg}"
-        elif level == "success":
-            formatted = f"[{timestamp}] [✓] {msg}"
-        elif level == "error":
-            formatted = f"[{timestamp}] [✗] {msg}"
-        elif level == "warning":
-            formatted = f"[{timestamp}] [⚠] {msg}"
-        else:
-            formatted = f"[{timestamp}] {msg}"
-        
-        self.log_text.insert('end', formatted + '\n')
-        self.log_text.see('end')
-        self.log_text.config(state='disabled')
+
+        # Si la fenêtre est déjà détruite (fermeture Tk), éviter les erreurs Tcl
+        try:
+            if not self.log_text.winfo_exists():
+                return
+            
+            self.log_text.config(state='normal')
+            
+            timestamp = datetime.datetime.now().strftime("%H:%M:%S")
+            
+            if level == "info":
+                formatted = f"[{timestamp}] [INFO] {msg}"
+            elif level == "success":
+                formatted = f"[{timestamp}] [✓] {msg}"
+            elif level == "error":
+                formatted = f"[{timestamp}] [✗] {msg}"
+            elif level == "warning":
+                formatted = f"[{timestamp}] [⚠] {msg}"
+            else:
+                formatted = f"[{timestamp}] {msg}"
+            
+            self.log_text.insert('end', formatted + '\n')
+            self.log_text.see('end')
+            self.log_text.config(state='disabled')
+        except Exception:
+            # Ne rien faire si Tkinter est déjà en cours de destruction
+            return
     
     def run(self):
         self.root.mainloop()
